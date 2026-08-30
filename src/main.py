@@ -3,8 +3,10 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .ai_query_engine import generate_queries
 from .dedupe import unique_leads
 from .lead_schema import Lead
+from .web_discovery import discover
 
 LINKEDIN_TARGET = int(os.getenv("LINKEDIN_TARGET", "5"))
 FACEBOOK_TARGET = int(os.getenv("FACEBOOK_TARGET", "5"))
@@ -26,28 +28,42 @@ def load_config() -> dict:
 def run() -> None:
     config = load_config()
     existing = load_existing()
-    total_target = LINKEDIN_TARGET + FACEBOOK_TARGET
+    previous = [x.get("other_channels", "") for x in json.loads(OUTPUT.read_text(encoding="utf-8"))] if OUTPUT.exists() else []
+    queries = generate_queries(config, previous_queries=previous)
 
-    # The production adapter must first generate fresh AI queries, then call
-    # the verified Composio LinkedIn/Facebook actions. We intentionally do not
-    # fabricate leads when an integration is unavailable or returns fewer
-    # qualifying records. Platform access controls are never bypassed.
-    new_candidates: list[Lead] = []
+    candidates = []
+    for source, target in (("linkedin", LINKEDIN_TARGET), ("facebook", FACEBOOK_TARGET)):
+        try:
+            candidates.extend(discover(source, queries[source], limit=target))
+        except Exception as exc:
+            print(f"{source} discovery failed: {exc}")
 
-    # TODO: wire AI query generation and verified Composio actions here.
-    # Required contract for the adapter:
-    #   - exactly up to 5 new qualifying LinkedIn leads per run
-    #   - exactly up to 5 new qualifying Facebook leads per run
-    #   - deduplicate against existing data
-    #   - collect only publicly/authorizedly available contact information
-    #   - preserve source attribution
-    _ = config
+    now = datetime.now(timezone.utc)
+    new_leads = []
+    for item in candidates:
+        try:
+            new_leads.append(Lead(
+                company=item.get("company") or item.get("name") or "Unknown",
+                website=None,
+                address=None,
+                phone=None,
+                whatsapp=None,
+                email=None,
+                other_channels=item.get("url"),
+                person_name=item.get("name"),
+                job_title=item.get("title"),
+                source=item.get("source"),
+                collected_at=now,
+                confidence="Medium" if item.get("url") else "Low",
+            ))
+        except Exception as exc:
+            print(f"Skipping invalid candidate: {exc}")
 
-    combined = unique_leads(existing + new_candidates[:total_target])
-    save(combined)
+    combined = unique_leads(existing + new_leads)
     added = len(combined) - len(existing)
-    print(f"Target: {LINKEDIN_TARGET} LinkedIn + {FACEBOOK_TARGET} Facebook = {total_target}")
-    print(f"Added: {added} | Total: {len(combined)}")
+    save(combined)
+    print(f"Target: {LINKEDIN_TARGET} LinkedIn + {FACEBOOK_TARGET} Facebook = {LINKEDIN_TARGET + FACEBOOK_TARGET}")
+    print(f"Candidates: {len(candidates)} | Added after dedupe: {added} | Total: {len(combined)}")
 
 
 def save(leads: list[Lead]) -> None:
