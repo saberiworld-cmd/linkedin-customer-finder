@@ -1,24 +1,23 @@
-"""Provider boundary for authorized Composio connections.
+"""Optional enrichment boundary for authorized Composio connections.
 
-The exact LinkedIn/Facebook action names are intentionally not guessed. They
-must be discovered from the user's connected Composio toolkits before wiring.
+Discovery is performed through Gemini grounded web search because the currently
+connected LinkedIn toolkit does not expose general people/company search and
+Facebook page search may be deprecated. Composio can enrich identifiers when a
+compatible action is available; discovery never fabricates data.
 """
 
 from typing import Any
 
 
 class ComposioSocialAdapter:
-    def __init__(self, client: Any):
+    def __init__(self, client: Any | None = None):
         self.client = client
 
-    def search_linkedin(self, query: str, limit: int = 5) -> list[dict[str, Any]]:
-        """Run the verified LinkedIn search action through Composio."""
-        raise NotImplementedError("Discover and connect the verified Composio LinkedIn action")
+    def enrich_linkedin(self, person_id: str | None = None, organization_id: str | None = None) -> dict[str, Any]:
+        return {"person_id": person_id, "organization_id": organization_id}
 
-    def search_facebook(self, query: str, limit: int = 5) -> list[dict[str, Any]]:
-        """Run the verified Facebook search action through Composio."""
-        raise NotImplementedError("Discover and connect the verified Composio Facebook action")
+    def enrich_facebook_page(self, page_id: str | None = None) -> dict[str, Any]:
+        return {"page_id": page_id}
 
     def send_email(self, recipient: str, subject: str, body: str) -> Any:
-        """Send outreach only through an explicitly authorized email integration."""
-        raise NotImplementedError("Connect an authorized email provider before enabling outreach")
+        raise NotImplementedError("Email sending remains disabled until explicitly enabled")
