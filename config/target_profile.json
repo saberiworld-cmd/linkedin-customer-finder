@@ -1,0 +1,43 @@
+{
+  "daily_new_records_max": 5,
+  "sources": ["linkedin", "facebook"],
+  "target_types": [
+    "petroleum_derivatives_consumer",
+    "petroleum_derivatives_producer",
+    "petroleum_derivatives_trader"
+  ],
+  "target_description": "Find new companies and relevant decision-makers that consume, produce, trade, import, export, distribute, or procure petroleum-derived products and related petrochemical materials.",
+  "contact_fields": [
+    "company",
+    "person_name",
+    "job_title",
+    "linkedin_url",
+    "company_linkedin_url",
+    "facebook_url",
+    "website",
+    "country",
+    "industry",
+    "email",
+    "phone",
+    "whatsapp",
+    "source",
+    "collected_at",
+    "confidence"
+  ],
+  "company": {
+    "legal_name": "روژان تجارت سیروان",
+    "brand": "روژان گلوبال",
+    "whatsapp": "+989023517939",
+    "wechat": "+989023517939",
+    "website": "https://www.rojanglobal.com",
+    "email": "info@rojanglobal.com"
+  },
+  "outreach": {
+    "enabled": false,
+    "require_valid_email": true,
+    "require_deduplication": true,
+    "send_only_to_new_records": true,
+    "approval_required_before_send": true,
+    "purpose": "Initial business-development outreach for supplying requested petroleum-derived and petrochemical products."
+  }
+}
