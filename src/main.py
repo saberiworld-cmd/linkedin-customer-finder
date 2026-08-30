@@ -6,7 +6,8 @@ from pathlib import Path
 from .dedupe import unique_leads
 from .lead_schema import Lead
 
-DAILY_MAX = int(os.getenv("DAILY_MAX_RECORDS", "5"))
+LINKEDIN_TARGET = int(os.getenv("LINKEDIN_TARGET", "5"))
+FACEBOOK_TARGET = int(os.getenv("FACEBOOK_TARGET", "5"))
 OUTPUT = Path(os.getenv("OUTPUT_FILE", "data/leads.json"))
 CONFIG = Path(os.getenv("TARGET_CONFIG", "config/target_profile.json"))
 
@@ -22,34 +23,31 @@ def load_config() -> dict:
     return json.loads(CONFIG.read_text(encoding="utf-8"))
 
 
-def today_new_count(existing: list[Lead]) -> int:
-    today = datetime.now(timezone.utc).date()
-    return sum(1 for lead in existing if lead.collected_at.date() == today)
-
-
 def run() -> None:
     config = load_config()
     existing = load_existing()
-    remaining = max(0, min(DAILY_MAX, config.get("daily_new_records_max", DAILY_MAX)) - today_new_count(existing))
+    total_target = LINKEDIN_TARGET + FACEBOOK_TARGET
 
-    # Provider-specific collection is injected through verified integrations.
-    # Search must use the configured target profile and all enabled sources.
-    # Never fabricate records and never bypass provider access controls.
+    # The production adapter must first generate fresh AI queries, then call
+    # the verified Composio LinkedIn/Facebook actions. We intentionally do not
+    # fabricate leads when an integration is unavailable or returns fewer
+    # qualifying records. Platform access controls are never bypassed.
     new_candidates: list[Lead] = []
 
-    if remaining > 0:
-        # TODO: invoke the verified Composio LinkedIn/Facebook actions and an
-        # approved AI search/ranking provider. The AI should generate varied
-        # search queries each run, score relevance, and return only new leads.
-        pass
+    # TODO: wire AI query generation and verified Composio actions here.
+    # Required contract for the adapter:
+    #   - exactly up to 5 new qualifying LinkedIn leads per run
+    #   - exactly up to 5 new qualifying Facebook leads per run
+    #   - deduplicate against existing data
+    #   - collect only publicly/authorizedly available contact information
+    #   - preserve source attribution
+    _ = config
 
-    combined = unique_leads(existing + new_candidates[:remaining])
+    combined = unique_leads(existing + new_candidates[:total_target])
     save(combined)
-    print(
-        f"Existing: {len(existing)} | Added today: {len(combined) - len(existing)} "
-        f"| Total: {len(combined)} | Remaining daily capacity: "
-        f"{max(0, DAILY_MAX - today_new_count(combined))}"
-    )
+    added = len(combined) - len(existing)
+    print(f"Target: {LINKEDIN_TARGET} LinkedIn + {FACEBOOK_TARGET} Facebook = {total_target}")
+    print(f"Added: {added} | Total: {len(combined)}")
 
 
 def save(leads: list[Lead]) -> None:
