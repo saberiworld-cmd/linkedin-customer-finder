@@ -1,41 +1,24 @@
 {
   "search_mode": "adaptive_ai_discovery",
-  "sources": ["linkedin", "facebook"],
-  "daily_target": 5,
-  "principles": [
-    "Generate varied search queries each run from the target profile.",
-    "Prefer new companies and new decision-makers not already stored.",
-    "Prioritize buyers, producers, traders, importers, exporters, distributors, procurement teams and commercial decision-makers for petroleum-derived products.",
-    "Use public/business contact information when available through authorized integrations.",
-    "Do not invent missing contact data.",
-    "Do not bypass platform access controls or anti-abuse mechanisms."
-  ],
-  "relevance_signals": [
-    "product_need",
-    "procurement_role",
-    "trading_activity",
-    "production_activity",
-    "import_export_activity",
-    "industry_match",
-    "geography_match",
-    "contact_completeness",
-    "freshness",
-    "duplicate_risk"
-  ],
-  "query_dimensions": [
-    "petroleum products",
-    "petroleum derivatives",
-    "petrochemicals",
-    "refined products",
-    "industrial chemicals",
-    "procurement",
-    "purchasing",
-    "trading",
-    "import",
-    "export",
-    "distribution",
-    "supply",
-    "buyer",
-    "producer"
-  ]
+  "run_target": {"linkedin": 5, "facebook": 5},
+  "sources": {
+    "linkedin": {
+      "tool": "LINKEDIN_SEARCH_AD_TARGETING_ENTITIES",
+      "purpose": "Discover targeting entities such as job titles, industries and geographic entities that can seed prospect research.",
+      "limitation": "This does not directly return a general list of LinkedIn people or companies; person/company enrichment requires an identifier and the corresponding get-person/get-company tool."
+    },
+    "facebook": {
+      "tool": "FACEBOOK_SEARCH_PAGES",
+      "purpose": "Search Facebook Pages matching business-oriented queries.",
+      "limitation": "Meta documents this endpoint as deprecated for standard Facebook apps and it may fail with permission error #10. The system records failure rather than fabricating leads."
+    }
+  },
+  "target_types": ["petroleum_derivatives_consumer", "petroleum_derivatives_producer", "petroleum_derivatives_trader", "importer", "exporter", "distributor", "procurement_team"],
+  "query_dimensions": ["petroleum products", "petroleum derivatives", "refined products", "petrochemicals", "industrial chemicals", "procurement", "purchasing", "trading", "import", "export", "distribution", "buyer", "producer", "refinery", "oilfield services"],
+  "quality_rules": {
+    "new_only": true,
+    "deduplicate_by": ["linkedin_url", "facebook_url", "company", "email", "phone"],
+    "never_fabricate_contact_data": true,
+    "preserve_source": true
+  }
 }
