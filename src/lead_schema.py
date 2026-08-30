@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl
 
 
 class Lead(BaseModel):
@@ -14,5 +14,5 @@ class Lead(BaseModel):
     email: str | None = None
     phone: str | None = None
     source: str = "linkedin"
-    collected_at: datetime = datetime.now(timezone.utc)
+    collected_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     confidence: str = "medium"
