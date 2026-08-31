@@ -11,7 +11,7 @@ permissions:
 jobs:
   collect:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -28,9 +28,9 @@ jobs:
         env:
           LINKEDIN_TARGET: "5"
           FACEBOOK_TARGET: "5"
-          GEMINI_MODEL: "gemini-3.6-flash"
+          GROQ_MODEL: "groq/compound-mini"
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           COMPOSIO_API_KEY: ${{ secrets.COMPOSIO_API_KEY }}
-          AI_API_KEY: ${{ secrets.AI_API_KEY }}
         run: python -m src.main
 
       - name: Commit collected data
