@@ -4,14 +4,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .ai_query_engine import generate_queries
-from .dedupe import unique_leads
+from .unique_leads import unique_leads if False else None
 from .lead_schema import Lead
-from .web_discovery import discover
+from .web_discovery import discover_all
 
 LINKEDIN_TARGET = int(os.getenv("LINKEDIN_TARGET", "5"))
 FACEBOOK_TARGET = int(os.getenv("FACEBOOK_TARGET", "5"))
 OUTPUT = Path(os.getenv("OUTPUT_FILE", "data/leads.json"))
 CONFIG = Path(os.getenv("TARGET_CONFIG", "config/target_profile.json"))
+
+# Keep compatibility with the repository's existing dedupe implementation.
+from .dedupe import unique_leads
 
 
 def load_existing() -> list[Lead]:
@@ -29,14 +32,15 @@ def run() -> None:
     config = load_config()
     existing = load_existing()
     previous = [x.get("other_channels", "") for x in json.loads(OUTPUT.read_text(encoding="utf-8"))] if OUTPUT.exists() else []
-    queries = generate_queries(config, previous_queries=previous)
 
-    candidates = []
-    for source, target in (("linkedin", LINKEDIN_TARGET), ("facebook", FACEBOOK_TARGET)):
-        try:
-            candidates.extend(discover(source, queries[source], limit=target))
-        except Exception as exc:
-            print(f"{source} discovery failed: {exc}")
+    # One AI planning call followed by one combined Google Search interaction.
+    # This avoids making two separate discovery API calls for the same run.
+    queries = generate_queries(config, previous_queries=previous)
+    candidates = discover_all(
+        queries,
+        linkedin_limit=LINKEDIN_TARGET,
+        facebook_limit=FACEBOOK_TARGET,
+    )
 
     now = datetime.now(timezone.utc)
     new_leads = []
@@ -62,8 +66,10 @@ def run() -> None:
     combined = unique_leads(existing + new_leads)
     added = len(combined) - len(existing)
     save(combined)
+    linkedin_added = sum(1 for item in new_leads if item.source == "linkedin")
+    facebook_added = sum(1 for item in new_leads if item.source == "facebook")
     print(f"Target: {LINKEDIN_TARGET} LinkedIn + {FACEBOOK_TARGET} Facebook = {LINKEDIN_TARGET + FACEBOOK_TARGET}")
-    print(f"Candidates: {len(candidates)} | Added after dedupe: {added} | Total: {len(combined)}")
+    print(f"Candidates: {len(candidates)} | Added after dedupe: {added} | LinkedIn: {linkedin_added} | Facebook: {facebook_added} | Total: {len(combined)}")
 
 
 def save(leads: list[Lead]) -> None:
