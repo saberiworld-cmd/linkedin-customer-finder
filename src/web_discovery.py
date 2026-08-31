@@ -1,33 +1,59 @@
 import json
 import os
-import re
-import requests
 
-MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+from google import genai
+
+MODEL = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
 API_KEY = os.getenv("AI_API_KEY")
 
 
-def discover(source: str, queries: list[str], limit: int = 5) -> list[dict]:
+def discover_all(queries: dict[str, list[str]], linkedin_limit: int = 5, facebook_limit: int = 5) -> list[dict]:
     if not API_KEY:
         raise RuntimeError("AI_API_KEY is required")
-    site = "linkedin.com" if source == "linkedin" else "facebook.com"
-    prompt = f'''Find up to {limit} NEW B2B prospects from public web results for {source}.
-Only return business/company pages or clearly business-relevant professional profiles.
-Target companies/persons involved in consuming, producing, trading, importing, exporting,
-distributing, or procuring petroleum derivatives, refined products, petrochemicals,
-industrial chemicals, oilfield products or related materials.
-Use these search themes: {json.dumps(queries, ensure_ascii=False)}
-Prioritize results whose public URL is on {site}. Do not invent URLs, names, emails or phones.
-Return JSON only: [{{"name":"", "title":"", "company":"", "url":"", "snippet":"", "source":"{source}"}}]'''
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent"
-    payload = {
-        "contents": [{"parts": [{"text": prompt}]}],
-        "tools": [{"google_search": {}}],
-    }
-    r = requests.post(url, params={"key": API_KEY}, json=payload, timeout=60)
-    r.raise_for_status()
-    data = r.json()
-    text = data["candidates"][0]["content"]["parts"][0]["text"]
-    text = re.sub(r"^```(?:json)?|```$", "", text.strip(), flags=re.MULTILINE).strip()
-    items = json.loads(text)
-    return [x for x in items if isinstance(x, dict)][:limit]
+
+    client = genai.Client(api_key=API_KEY)
+    prompt = f"""You are a B2B lead discovery researcher using Google Search.
+Find NEW, publicly discoverable business prospects in exactly two source buckets.
+Target: companies and relevant decision-makers that consume, produce, trade, import,
+export, distribute, or procure petroleum derivatives, refined petroleum products,
+petrochemicals, industrial chemicals, oilfield products or related materials.
+
+For LinkedIn, return up to {linkedin_limit} results whose canonical public URL is on linkedin.com.
+For Facebook, return up to {facebook_limit} results whose canonical public URL is on facebook.com.
+Prefer company pages and clearly business-relevant professional profiles. Do not return personal
+social profiles unless they are clearly business-relevant and publicly visible.
+Use the supplied query themes as starting points, but vary the search as needed.
+Do not invent names, companies, URLs, emails, phones, titles or snippets.
+Return JSON only as an object with keys linkedin and facebook. Each is an array of objects with:
+name, title, company, url, snippet, source.
+Query themes: {json.dumps(queries, ensure_ascii=False)}"""
+
+    interaction = client.interactions.create(
+        model=MODEL,
+        input=prompt,
+        tools=[{"type": "google_search"}],
+        generation_config={"max_output_tokens": 3000, "thinking_level": "low"},
+    )
+    text = interaction.output_text
+    text = text.replace("```json", "").replace("```", "").strip()
+    data = json.loads(text)
+
+    results = []
+    for source, limit in (("linkedin", linkedin_limit), ("facebook", facebook_limit)):
+        for item in data.get(source, [])[:limit]:
+            if isinstance(item, dict):
+                url = str(item.get("url", ""))
+                if source == "linkedin" and "linkedin.com" not in url:
+                    continue
+                if source == "facebook" and "facebook.com" not in url:
+                    continue
+                item["source"] = source
+                results.append(item)
+    return results
+
+
+def discover(source: str, queries: list[str], limit: int = 5) -> list[dict]:
+    """Backward-compatible single-source wrapper."""
+    return discover_all({"linkedin": queries if source == "linkedin" else [], "facebook": queries if source == "facebook" else []},
+                        linkedin_limit=limit if source == "linkedin" else 0,
+                        facebook_limit=limit if source == "facebook" else 0)
