@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .ai_query_engine import generate_queries
-from .unique_leads import unique_leads if False else None
+from .dedupe import unique_leads
 from .lead_schema import Lead
 from .web_discovery import discover_all
 
@@ -12,9 +12,6 @@ LINKEDIN_TARGET = int(os.getenv("LINKEDIN_TARGET", "5"))
 FACEBOOK_TARGET = int(os.getenv("FACEBOOK_TARGET", "5"))
 OUTPUT = Path(os.getenv("OUTPUT_FILE", "data/leads.json"))
 CONFIG = Path(os.getenv("TARGET_CONFIG", "config/target_profile.json"))
-
-# Keep compatibility with the repository's existing dedupe implementation.
-from .dedupe import unique_leads
 
 
 def load_existing() -> list[Lead]:
@@ -33,8 +30,6 @@ def run() -> None:
     existing = load_existing()
     previous = [x.get("other_channels", "") for x in json.loads(OUTPUT.read_text(encoding="utf-8"))] if OUTPUT.exists() else []
 
-    # One AI planning call followed by one combined Google Search interaction.
-    # This avoids making two separate discovery API calls for the same run.
     queries = generate_queries(config, previous_queries=previous)
     candidates = discover_all(
         queries,
