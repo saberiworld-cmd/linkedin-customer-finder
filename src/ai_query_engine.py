@@ -3,7 +3,7 @@ import os
 
 from google import genai
 
-MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+MODEL = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
 API_KEY = os.getenv("AI_API_KEY")
 
 
@@ -18,20 +18,29 @@ Create fresh, non-repetitive search queries for two sources: LinkedIn and Facebo
 Target: companies and relevant decision-makers that consume, produce, trade, import,
 export, distribute, or procure petroleum derivatives, refined petroleum products,
 and petrochemical/industrial chemical materials.
-Return JSON only with keys linkedin and facebook. Each key must contain 5 concise
+Return JSON only with keys linkedin and facebook. Each key must contain exactly 5 concise
 search queries. Avoid queries already used in this list: {json.dumps(previous_queries, ensure_ascii=False)}.
 Target profile: {json.dumps(profile, ensure_ascii=False)}"""
 
-    response = client.models.generate_content(
+    interaction = client.interactions.create(
         model=MODEL,
-        contents=prompt,
-        config={
-            "temperature": 0.7,
-            "response_mime_type": "application/json",
-            "max_output_tokens": 1200,
+        input=prompt,
+        generation_config={"max_output_tokens": 1200, "thinking_level": "low"},
+        response_format={
+            "type": "text",
+            "mime_type": "application/json",
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "linkedin": {"type": "array", "items": {"type": "string"}},
+                    "facebook": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["linkedin", "facebook"],
+            },
         },
     )
-    data = json.loads(response.text)
+    text = interaction.output_text
+    data = json.loads(text)
     return {
         "linkedin": [str(q) for q in data.get("linkedin", [])[:5]],
         "facebook": [str(q) for q in data.get("facebook", [])[:5]],
