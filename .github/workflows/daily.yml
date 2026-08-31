@@ -28,7 +28,7 @@ jobs:
         env:
           LINKEDIN_TARGET: "5"
           FACEBOOK_TARGET: "5"
-          GEMINI_MODEL: "gemini-2.5-flash"
+          GEMINI_MODEL: "gemini-3.6-flash"
           COMPOSIO_API_KEY: ${{ secrets.COMPOSIO_API_KEY }}
           AI_API_KEY: ${{ secrets.AI_API_KEY }}
         run: python -m src.main
