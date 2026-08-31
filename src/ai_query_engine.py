@@ -25,7 +25,6 @@ Target profile: {json.dumps(profile, ensure_ascii=False)}"""
     interaction = client.interactions.create(
         model=MODEL,
         input=prompt,
-        generation_config={"max_output_tokens": 1200, "thinking_level": "low"},
         response_format={
             "type": "text",
             "mime_type": "application/json",
@@ -40,6 +39,8 @@ Target profile: {json.dumps(profile, ensure_ascii=False)}"""
         },
     )
     text = interaction.output_text
+    if not text:
+        raise RuntimeError("Gemini returned an empty response")
     data = json.loads(text)
     return {
         "linkedin": [str(q) for q in data.get("linkedin", [])[:5]],
