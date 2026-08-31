@@ -1,50 +1,76 @@
-import json
-import os
+import re
+from urllib.parse import quote, unquote, urlparse
+
 import requests
+from bs4 import BeautifulSoup
 
-MODEL = os.getenv("GROQ_MODEL", "groq/compound-mini")
-API_KEY = os.getenv("GROQ_API_KEY")
+HEADERS = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/126 Safari/537.36"}
 
 
-def _search(prompt: str) -> str:
-    if not API_KEY:
-        raise RuntimeError("GROQ_API_KEY is required")
-    r = requests.post(
-        "https://api.groq.com/openai/v1/chat/completions",
-        headers={"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"},
-        json={
-            "model": MODEL,
-            "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.1,
-        },
-        timeout=90,
-    )
+def _extract_result_links(html: str, site: str, limit: int) -> list[dict]:
+    soup = BeautifulSoup(html, "html.parser")
+    results = []
+    seen = set()
+    for a in soup.select("li.b_algo h2 a, h2 a"):
+        href = a.get("href", "")
+        title = a.get_text(" ", strip=True)
+        if not href or not title:
+            continue
+        if href.startswith("/"):
+            continue
+        parsed = urlparse(href)
+        if parsed.scheme not in ("http", "https"):
+            continue
+        host = parsed.netloc.lower().split(":")[0]
+        if not (host == site or host.endswith("." + site)):
+            continue
+        canonical = href.split("?")[0].rstrip("/")
+        if canonical in seen:
+            continue
+        seen.add(canonical)
+        container = a.find_parent("li")
+        snippet = ""
+        if container:
+            p = container.find("p")
+            if p:
+                snippet = p.get_text(" ", strip=True)
+        results.append({"name": title, "title": None, "company": title, "url": canonical, "snippet": snippet})
+        if len(results) >= limit:
+            break
+    return results
+
+
+def _search_bing(query: str, site: str, limit: int = 5) -> list[dict]:
+    scoped = f"site:{site} {query}"
+    url = "https://www.bing.com/search?q=" + quote(scoped) + "&count=10"
+    r = requests.get(url, headers=HEADERS, timeout=30)
     r.raise_for_status()
-    return r.json()["choices"][0]["message"]["content"]
+    return _extract_result_links(r.text, site, limit)
 
 
 def discover_all(queries: dict[str, list[str]], linkedin_limit: int = 5, facebook_limit: int = 5) -> list[dict]:
     results: list[dict] = []
-    for source, limit in (("linkedin", linkedin_limit), ("facebook", facebook_limit)):
-        site = "linkedin.com" if source == "linkedin" else "facebook.com"
-        prompt = f"""Use your built-in real-time web search to find up to {limit} NEW B2B prospects for {source}.
-Search the public web and prioritize canonical URLs on {site}. Target companies and clearly business-relevant decision-makers
-that consume, produce, trade, import, export, distribute, or procure petroleum derivatives, refined petroleum products,
-petrochemicals, industrial chemicals, oilfield products, or related materials.
-Use these search themes and vary them: {json.dumps(queries.get(source, []), ensure_ascii=False)}.
-Do not invent data. Return JSON only as an array of objects with name,title,company,url,snippet,source.
-Only include results with a real public URL from {site}."""
-        text = _search(prompt).replace("```json", "").replace("```", "").strip()
-        data = json.loads(text)
-        if isinstance(data, list):
-            for item in data:
-                if not isinstance(item, dict):
+    targets = (("linkedin", "linkedin.com", linkedin_limit), ("facebook", "facebook.com", facebook_limit))
+    for source, site, target in targets:
+        if target <= 0:
+            continue
+        seen = set()
+        for query in queries.get(source, []):
+            try:
+                found = _search_bing(query, site, limit=target)
+            except requests.RequestException as exc:
+                print(f"{source} web search failed for query '{query}': {exc}")
+                continue
+            for item in found:
+                if item["url"] in seen:
                     continue
-                url = str(item.get("url", ""))
-                if site not in url:
-                    continue
+                seen.add(item["url"])
                 item["source"] = source
                 results.append(item)
+                if sum(1 for x in results if x["source"] == source) >= target:
+                    break
+            if sum(1 for x in results if x["source"] == source) >= target:
+                break
     return results
 
 
